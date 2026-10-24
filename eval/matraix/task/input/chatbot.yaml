@@ -1,0 +1,26 @@
+transport: sidecar_http
+runtimeDefaults:
+  applicationId: fixcam
+  applicationContext: repair_assistant
+  domain: home_repair
+capabilities:
+  - text_chat
+connection:
+  baseUrl: http://fixcam-api:8000
+  healthPath: /health
+protocol:
+  sendMessage:
+    method: POST
+    path: /v1/messages
+    sessionIdField: sessionId
+    messageField: message
+    titleField: ""
+    botTypeField: ""
+    staticBody: {}
+  response:
+    sessionIdField: sessionId
+    replyField: reply
+artifacts:
+  transcript: transcript.json
+  applicationResult: application_result.json
+  feedback: user_feedback.json

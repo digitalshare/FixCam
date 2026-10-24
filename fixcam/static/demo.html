@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FixCam</title>
+<style>
+  :root { --bg:#f2f2f7; --panel:#fff; --me:#0a84ff; --them:#e9e9eb; --text:#111; --muted:#6e6e73; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#000; --panel:#1c1c1e; --them:#2c2c2e; --text:#f5f5f7; --muted:#98989d; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system,system-ui,sans-serif; }
+  .phone { max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:var(--panel); }
+  header { padding:14px 16px; text-align:center; border-bottom:1px solid var(--them); }
+  header b { font-size:17px; } header small { display:block; color:var(--muted); font-size:12px; }
+  #log { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; }
+  .msg { max-width:80%; padding:9px 13px; border-radius:18px; white-space:pre-wrap; word-wrap:break-word; }
+  .me { align-self:flex-end; background:var(--me); color:#fff; }
+  .them { align-self:flex-start; background:var(--them); }
+  .imgs { align-self:flex-start; display:grid; grid-template-columns:1fr 1fr; gap:4px; max-width:85%; }
+  .imgs img, .me-media { width:100%; border-radius:12px; display:block; }
+  .me-media { align-self:flex-end; max-width:60%; }
+  audio { align-self:flex-start; max-width:80%; }
+  a.link { align-self:flex-start; background:var(--them); color:inherit; border-radius:14px; padding:9px 13px; font-size:14px; }
+  .meta { align-self:center; color:var(--muted); font-size:11px; }
+  form { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--them); align-items:center; }
+  input[type=text] { flex:1; min-width:0; padding:9px 14px; border-radius:20px; border:1px solid var(--them); background:var(--bg); color:inherit; font-size:16px; }
+  label.attach, button { border:0; background:var(--me); color:#fff; border-radius:50%; width:36px; height:36px; font-size:18px; cursor:pointer; display:grid; place-items:center; flex:none; }
+  label.attach { background:var(--them); color:var(--text); }
+  input[type=file] { display:none; }
+  #picked { color:var(--muted); font-size:12px; padding:0 16px 6px; min-height:1em; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <header><b>FixCam</b><small>Text a video, get it fixed</small></header>
+  <div id="log"></div>
+  <div id="picked"></div>
+  <form id="f">
+    <label class="attach" title="Attach video/photo/voice">＋<input id="file" type="file" accept="video/*,image/*,audio/*" multiple></label>
+    <input id="text" type="text" placeholder="iMessage" autocomplete="off">
+    <button type="submit" title="Send">↑</button>
+  </form>
+</div>
+<script>
+const sid = (() => { try { return localStorage.getItem("fixcam_sid") || (localStorage.setItem("fixcam_sid", crypto.randomUUID()), localStorage.getItem("fixcam_sid")); } catch { return crypto.randomUUID(); } })();
+const log = document.getElementById("log"), file = document.getElementById("file"), text = document.getElementById("text"), picked = document.getElementById("picked");
+const add = (el) => { log.appendChild(el); log.scrollTop = log.scrollHeight; return el; };
+const bubble = (t, cls) => { const d = document.createElement("div"); d.className = "msg " + cls; d.textContent = t; return add(d); };
+file.onchange = () => picked.textContent = [...file.files].map(f => f.name).join(", ");
+document.getElementById("f").onsubmit = async (e) => {
+  e.preventDefault();
+  const msg = text.value.trim(), files = [...file.files];
+  if (!msg && !files.length) return;
+  if (msg.toLowerCase() === "reset") { const fd = new FormData(); fd.append("sessionId", sid); await fetch("/demo/reset", {method:"POST", body:fd}); log.innerHTML = ""; text.value = ""; return; }
+  for (const f of files) {
+    const url = URL.createObjectURL(f);
+    const el = f.type.startsWith("video") ? Object.assign(document.createElement("video"), {src:url, controls:true, muted:true})
+             : f.type.startsWith("image") ? Object.assign(document.createElement("img"), {src:url})
+             : Object.assign(document.createElement("audio"), {src:url, controls:true});
+    el.className = "me-media"; add(el);
+  }
+  if (msg) bubble(msg, "me");
+  const fd = new FormData(); fd.append("sessionId", sid); fd.append("message", msg); files.forEach(f => fd.append("files", f));
+  text.value = ""; file.value = ""; picked.textContent = "";
+  const typing = bubble(files.length ? "Taking a look 👀 …" : "…", "them");
+  try {
+    const r = await (await fetch("/demo/turn", {method:"POST", body:fd})).json();
+    typing.remove();
+    bubble(r.reply, "them");
+    if (r.images?.length) { const g = add(Object.assign(document.createElement("div"), {className:"imgs"})); r.images.forEach(src => g.appendChild(Object.assign(document.createElement("img"), {src}))); }
+    (r.links || []).forEach(l => add(Object.assign(document.createElement("a"), {className:"link", href:l.url, target:"_blank", textContent:"🔗 " + (l.title || l.url)})));
+    if (r.voice) add(Object.assign(document.createElement("audio"), {src:r.voice, controls:true}));
+    if (r.timings) add(Object.assign(document.createElement("div"), {className:"meta", textContent: Object.entries(r.timings).map(([k,v]) => `${k} ${v}s`).join(" · ")}));
+  } catch (err) { typing.textContent = "Error: " + err; }
+};
+</script>
+</body>
+</html>

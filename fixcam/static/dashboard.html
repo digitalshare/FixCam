@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FixCam Dashboard</title>
+<style>
+  :root {
+    --bg:#f5f5f7; --panel:#ffffff; --panel-2:#f0f0f3; --text:#1d1d1f; --muted:#6e6e73; --line:#e3e3e8;
+    --accent:#ff3b30; --ok:#30a46c; --run:#0a84ff; --warn:#ff9f0a; --err:#e5484d; --skip:#a1a1aa;
+    --shadow:0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0b0b0d; --panel:#16161a; --panel-2:#1e1e23; --text:#f2f2f5; --muted:#9a9aa3; --line:#2a2a31;
+            --shadow:0 1px 2px rgba(0,0,0,.4); }
+  }
+  * { box-sizing:border-box; }
+  html { background:var(--bg); }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; }
+  a { color:var(--run); text-decoration:none; } a:hover { text-decoration:underline; }
+  header { position:sticky; top:0; z-index:5; background:color-mix(in srgb,var(--bg) 85%,transparent); backdrop-filter:blur(12px);
+           border-bottom:1px solid var(--line); }
+  .bar { max-width:1200px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .brand { font-weight:700; font-size:18px; display:flex; align-items:center; gap:8px; }
+  .brand i { width:10px; height:10px; border-radius:50%; background:var(--accent); display:inline-block; }
+  nav { display:flex; gap:4px; background:var(--panel-2); padding:3px; border-radius:10px; }
+  nav a { padding:6px 14px; border-radius:8px; color:var(--muted); font-weight:500; }
+  nav a.on { background:var(--panel); color:var(--text); box-shadow:var(--shadow); text-decoration:none; }
+  .spacer { flex:1; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:13px; font-weight:600;
+          background:var(--panel-2); color:var(--muted); white-space:nowrap; }
+  .pill .dot { width:8px; height:8px; border-radius:50%; background:var(--skip); }
+  .pill.live { color:var(--ok); } .pill.live .dot { background:var(--ok); animation:pulse 1.4s infinite; }
+  .pill.busy { color:var(--run); } .pill.busy .dot { background:var(--run); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  main { max-width:1200px; margin:0 auto; padding:20px 16px 60px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:28px 0 10px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:16px; }
+  .muted { color:var(--muted); } .small { font-size:13px; }
+  .empty { text-align:center; padding:48px 16px; color:var(--muted); }
+
+  /* pipeline */
+  .pipe { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; position:relative; }
+  .node { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px; position:relative; min-height:150px;
+          transition:border-color .3s, box-shadow .3s; box-shadow:var(--shadow); }
+  .node:not(:last-child)::after { content:""; position:absolute; right:-11px; top:28px; width:12px; height:2px; background:var(--line); }
+  .node.done:not(:last-child)::after { background:var(--ok); }
+  .node .n { font-size:11px; color:var(--muted); font-weight:600; letter-spacing:.05em; }
+  .node .t { font-weight:650; margin:2px 0 4px; }
+  .node .by { font-size:11px; font-weight:600; display:inline-block; padding:1px 7px; border-radius:6px; background:var(--panel-2); color:var(--muted); }
+  .node .st { position:absolute; top:12px; right:12px; width:10px; height:10px; border-radius:50%; background:var(--line); }
+  .node .det { margin-top:8px; font-size:12.5px; color:var(--muted); line-height:1.45; word-break:break-word; }
+  .node .det b { color:var(--text); font-weight:600; }
+  .node .time { position:absolute; top:8px; right:28px; font-size:12px; font-variant-numeric:tabular-nums; color:var(--muted); }
+  .node.running { border-color:var(--run); box-shadow:0 0 0 3px color-mix(in srgb,var(--run) 18%,transparent); }
+  .node.running .st { background:var(--run); animation:pulse 1s infinite; }
+  .node.done .st { background:var(--ok); } .node.error { border-color:var(--err); } .node.error .st { background:var(--err); }
+  .node.skipped { opacity:.5; } .node.skipped .st { background:var(--skip); }
+  @media (max-width:900px) { .pipe { grid-template-columns:repeat(2,minmax(0,1fr)); } .node::after { display:none; } }
+
+  .live-grid { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:16px; margin-top:16px; }
+  @media (max-width:900px) { .live-grid { grid-template-columns:1fr; } }
+  .screen { width:100%; aspect-ratio:16/9; border-radius:12px; background:#000; object-fit:contain; display:block; }
+  .frames { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
+  .frames img { height:90px; border-radius:8px; border:1px solid var(--line); flex:none; }
+
+  .diag .obj { font-size:20px; font-weight:700; }
+  .tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:6px; background:var(--panel-2); margin:2px 4px 2px 0; }
+  .tag.err { background:color-mix(in srgb,var(--accent) 15%,transparent); color:var(--accent); }
+  .safety { border-left:4px solid var(--warn); background:color-mix(in srgb,var(--warn) 10%,transparent); padding:10px 12px; border-radius:8px; margin-top:12px; }
+  .steps { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px; }
+  .step { display:grid; grid-template-columns:34px 1fr; gap:10px; align-items:start; padding:10px; border-radius:12px; border:1px solid var(--line); background:var(--panel); }
+  .step.cur { border-color:var(--run); box-shadow:0 0 0 3px color-mix(in srgb,var(--run) 15%,transparent); }
+  .step .num { width:30px; height:30px; border-radius:50%; background:var(--accent); color:#fff; font-weight:700; display:grid; place-items:center; }
+  .step img { width:100%; max-width:420px; border-radius:10px; margin-top:8px; display:block; }
+  .sources { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  .sources li { font-size:13.5px; } .sources .host { color:var(--muted); font-size:12px; }
+
+  /* history */
+  .hist { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+  .hcard { background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; cursor:pointer; box-shadow:var(--shadow);
+           display:flex; flex-direction:column; color:inherit; transition:transform .15s; }
+  .hcard:hover { transform:translateY(-2px); text-decoration:none; }
+  .hcard .img { aspect-ratio:16/9; background:var(--panel-2) center/cover no-repeat; }
+  .hcard .body { padding:12px; display:flex; flex-direction:column; gap:4px; }
+  .hcard .title { font-weight:650; }
+  .src { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+  .status-done { color:var(--ok); } .status-error { color:var(--err); } .status-running { color:var(--run); } .status-needs_info { color:var(--warn); }
+
+  /* report */
+  .report { max-width:860px; margin:0 auto; }
+  .report h1 { font-size:28px; margin:4px 0 6px; }
+  .report .meta { display:flex; flex-wrap:wrap; gap:6px 18px; color:var(--muted); font-size:13px; }
+  .report section { margin-top:22px; }
+  .timeline { display:flex; height:28px; border-radius:8px; overflow:hidden; border:1px solid var(--line); }
+  .timeline div { display:grid; place-items:center; font-size:11px; font-weight:600; color:#fff; min-width:2px; white-space:nowrap; overflow:hidden; }
+  .btn { border:1px solid var(--line); background:var(--panel); color:var(--text); border-radius:10px; padding:8px 14px; font:inherit; font-weight:600; cursor:pointer; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; } @media (max-width:700px) { .two { grid-template-columns:1fr; } }
+  @media print {
+    header, .noprint { display:none !important; } body { background:#fff; color:#000; } main { padding:0; }
+    .card, .step { box-shadow:none; break-inside:avoid; } a { color:#000; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><i></i> FixCam</div>
+    <nav>
+      <a href="#live" data-tab="live">Live workflow</a>
+      <a href="#history" data-tab="history">History</a>
+    </nav>
+    <div class="spacer"></div>
+    <span id="callPill" class="pill"><span class="dot"></span><span>Idle</span></span>
+  </div>
+</header>
+<main id="view"></main>
+
+<script>
+const STAGES = [
+  { key: "ingest",   title: "Capture",       by: "FaceTime · Chert + LiveKit" },
+  { key: "diagnose", title: "Diagnose",      by: "Claude vision" },
+  { key: "research", title: "Research",      by: "Keenable web search" },
+  { key: "plan",     title: "Fix plan",      by: "Claude" },
+  { key: "render",   title: "Mark up frames", by: "Annotation" },
+  { key: "guide",    title: "Talk through",  by: "Voice on FaceTime · Nebius" },
+];
+const SOURCE = { camera: "FaceTime camera", phone: "Phone upload", voice: "Voice description", web: "Web demo",
+                 imessage: "iMessage", eval: "Persona eval", chat: "Chat API" };
+const COLORS = { ingest:"#8e8e93", diagnose:"#d97757", research:"#0a84ff", plan:"#c2410c", render:"#30a46c", guide:"#8b5cf6" };
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+const secs = (a, b) => (a && b ? Math.max(0, b - a) : 0);
+const fmtS = s => s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${s.toFixed(1)}s`;
+const when = t => new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const getJSON = async u => (await fetch(u, { cache: "no-store" })).json();
+const view = document.getElementById("view");
+
+let timers = [];
+const clearTimers = () => { timers.forEach(clearInterval); timers = []; };
+
+// ---------------------------------------------------------------- header status
+async function pollStatus() {
+  try {
+    const s = await getJSON("/api/live");
+    const pill = document.getElementById("callPill");
+    pill.className = "pill" + (s.busy ? " busy" : s.inCall ? " live" : "");
+    pill.lastElementChild.textContent = s.busy ? "Analysing…" : s.inCall ? "On a FaceTime call" : "Idle";
+    return s;
+  } catch { return null; }
+}
+pollStatus();
+setInterval(pollStatus, 1500);
+
+// ---------------------------------------------------------------- shared renderers
+function stageDetail(key, st, run) {
+  const d = st.detail || {};
+  const lines = [];
+  if (key === "ingest") {
+    lines.push(`<b>${esc(SOURCE[run.source] || run.source)}</b>`);
+    if (d.frames != null) lines.push(`${d.frames} frame${d.frames === 1 ? "" : "s"} sampled`);
+    if (d.transcripts) lines.push(`${d.transcripts} audio transcript${d.transcripts === 1 ? "" : "s"}`);
+    if (run.note) lines.push(`“${esc(run.note.slice(0, 60))}”`);
+  } else if (key === "diagnose") {
+    if (d.object) lines.push(`<b>${esc(d.object)}</b>`);
+    if (d.error_code) lines.push(`Code: <b>${esc(d.error_code)}</b>`);
+    if (d.confidence) lines.push(`Confidence: ${esc(d.confidence)}`);
+    if (!lines.length && st.status === "running") lines.push(`Reading ${d.frames ?? 0} frame(s)…`);
+  } else if (key === "research") {
+    if (d.queries) lines.push(...d.queries.slice(0, 2).map(q => `🔎 ${esc(q)}`));
+    if (d.sources != null) lines.push(`<b>${d.sources}</b> results · ${d.pages_read} pages read`);
+  } else if (key === "plan") {
+    if (d.steps != null) lines.push(`<b>${d.steps}</b> steps · ${d.parts} parts/tools`);
+    else if (st.status === "running") lines.push("Grounding steps in sources…");
+  } else if (key === "render") {
+    if (d.images != null) lines.push(`<b>${d.images}</b> marked-up frame${d.images === 1 ? "" : "s"}`);
+  } else if (key === "guide") {
+    const n = run.plan?.steps?.length;
+    if (run.current_step && n) lines.push(`On step <b>${run.current_step}</b> of ${n}`);
+    else if (run.status === "needs_info") lines.push("Asked the caller for a clearer look");
+    else if (st.status === "skipped") lines.push("Not a FaceTime call");
+    else lines.push("Waiting for the caller");
+  }
+  if (st.status === "skipped" && run.status === "needs_info" && key !== "guide") return "Skipped: needed more info";
+  return lines.join("<br>");
+}
+
+function pipeline(run) {
+  const now = Date.now() / 1000;
+  return `<div class="pipe">${STAGES.map((s, i) => {
+    const st = run?.stages?.[s.key] || { status: "pending", detail: {} };
+    const t = st.started ? secs(st.started, st.ended || (st.status === "running" ? now : st.started)) : 0;
+    return `<div class="node ${st.status}">
+      <span class="st"></span>
+      <div class="n">STEP ${i + 1}</div>
+      <div class="t">${s.title}</div>
+      <span class="by">${s.by}</span>
+      <div class="det">${run ? stageDetail(s.key, st, run) : ""}</div>
+      ${t ? `<div class="time">${fmtS(t)}</div>` : ""}
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function diagnosisCard(run) {
+  const d = run.diagnosis, p = run.plan;
+  if (!d) return `<div class="card muted">No diagnosis yet.</div>`;
+  return `<div class="card diag">
+    <div class="obj">${esc(d.object_type)}</div>
+    <div style="margin:4px 0 8px">${d.brand ? `<span class="tag">${esc(d.brand)}</span>` : ""}${d.model_number ? `<span class="tag">${esc(d.model_number)}</span>` : ""}${d.visible_error ? `<span class="tag err">${esc(d.visible_error)}</span>` : ""}<span class="tag">confidence: ${esc(d.confidence)}</span></div>
+    <div>${esc(d.problem_summary)}</div>
+    ${d.likely_causes?.length ? `<div class="small muted" style="margin-top:8px">Likely causes: ${d.likely_causes.map(esc).join(" · ")}</div>` : ""}
+    ${p?.safety_warning ? `<div class="safety">⚠️ ${esc(p.safety_warning)}</div>` : ""}
+    ${d.clarifying_question ? `<div class="safety" style="border-color:var(--run);background:color-mix(in srgb,var(--run) 10%,transparent)">💬 FixCam asked: ${esc(d.clarifying_question)}</div>` : ""}
+  </div>`;
+}
+
+function stepsList(run, withImages = true) {
+  const steps = run.plan?.steps || [];
+  if (!steps.length) return `<div class="card muted">Steps appear here once the fix plan is ready.</div>`;
+  return `<ol class="steps">${steps.map((s, i) => {
+    const img = (run.step_images || [])[i];
+    return `<li class="step ${run.current_step === i + 1 ? "cur" : ""}">
+      <div class="num">${i + 1}</div>
+      <div><div>${esc(s.instruction)}</div>${withImages && img ? `<img src="${esc(img)}" alt="Step ${i + 1}: ${esc(s.short_label)}" loading="lazy">` : ""}</div>
+    </li>`;
+  }).join("")}</ol>`;
+}
+
+function sourcesList(run) {
+  const used = new Set(run.plan?.source_urls || []);
+  const list = (run.sources || []).slice().sort((a, b) => used.has(b.url) - used.has(a.url));
+  if (!list.length) return `<div class="muted small">No web sources.</div>`;
+  return `<ul class="sources">${list.map(s => `<li>${used.has(s.url) ? "★ " : ""}<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>
+    <div class="host">${esc(host(s.url))}${s.extracted ? " · steps extracted" : ""}</div></li>`).join("")}</ul>`;
+}
+
+// ---------------------------------------------------------------- live view
+function renderCamera(cam) {
+  const img = document.getElementById("cam"), msg = document.getElementById("camMsg"), badge = document.getElementById("camBadge");
+  if (!img) return;
+  const fresh = cam.age != null && cam.age < 3 && cam.status !== "none" && cam.status !== "muted";
+  if (fresh) {
+    img.src = `/live/camera.jpg?t=${Date.now()}`;
+    img.style.display = "block"; msg.style.display = "none";
+    badge.innerHTML = `<span class="pill live" style="font-size:11px;padding:1px 8px;vertical-align:1px"><span class="dot"></span>LIVE</span>`;
+    return;
+  }
+  img.style.display = "none"; msg.style.display = "grid"; badge.innerHTML = "";
+  msg.textContent = {
+    none: "No call in progress.",
+    waiting: "On the call, but no video from the caller yet. Make sure it's a FaceTime Video call with the camera on. If this stays empty, caller capture isn't enabled on this Chert line.",
+    connected: "Camera track connected — waiting for frames…",
+    muted: "The caller turned their camera off.",
+  }[cam.status] || (cam.age != null ? `Last frame ${Math.round(cam.age)}s ago.` : "No video from the caller.");
+}
+
+async function renderLive() {
+  view.innerHTML = `
+    <div id="pipe"></div>
+    <div class="live-grid">
+      <div>
+        <div class="two">
+          <div>
+            <h2>Caller's camera <span id="camBadge"></span></h2>
+            <div class="card" style="padding:8px;position:relative">
+              <img id="cam" class="screen" alt="Caller's FaceTime camera" style="display:none">
+              <div id="camMsg" class="screen" style="display:grid;place-items:center;text-align:center;padding:16px;color:var(--muted);font-size:13px;background:var(--panel-2)"></div>
+            </div>
+          </div>
+          <div>
+            <h2>Caller's FaceTime screen</h2>
+            <div class="card" style="padding:8px"><img id="screen" class="screen" alt="What the caller sees"></div>
+          </div>
+        </div>
+        <h2>Captured frames</h2>
+        <div class="card"><div id="frames" class="frames"></div></div>
+        <h2>Diagnosis</h2>
+        <div id="diag"></div>
+      </div>
+      <div>
+        <h2>Fix steps</h2>
+        <div id="steps"></div>
+        <h2>Sources (Keenable)</h2>
+        <div class="card" id="srcs"></div>
+        <div class="small muted" style="margin-top:10px" id="runlink"></div>
+      </div>
+    </div>`;
+  let screenVersion = -1, runId = null, lastJSON = "";
+  const tick = async () => {
+    const s = await pollStatus();
+    if (!s) return;
+    if (s.screenVersion !== screenVersion) {
+      screenVersion = s.screenVersion;
+      document.getElementById("screen").src = `/live/screen.png?v=${screenVersion}`;
+    }
+    renderCamera(s.camera || {});
+    runId = s.latestRunId;
+    if (!runId) {
+      document.getElementById("pipe").innerHTML = pipeline(null);
+      document.getElementById("diag").innerHTML = `<div class="card empty">Call FixCam on FaceTime and point your camera at something broken,<br>or send a photo from <a href="${esc(s.phoneUrl)}" target="_blank">${esc(s.phoneUrl)}</a>.</div>`;
+      return;
+    }
+    const run = await getJSON(`/api/runs/${runId}`);
+    document.getElementById("pipe").innerHTML = pipeline(run);  // re-render for live timers
+    const json = JSON.stringify(run);
+    if (json === lastJSON) return;
+    lastJSON = json;
+    document.getElementById("frames").innerHTML = run.frames.length
+      ? run.frames.map(f => `<img src="${esc(f)}" alt="captured frame" loading="lazy">`).join("")
+      : `<span class="muted small">${run.source === "voice" ? "Voice description only — no image." : "Waiting for frames…"}</span>`;
+    document.getElementById("diag").innerHTML = diagnosisCard(run);
+    document.getElementById("steps").innerHTML = stepsList(run, false);
+    document.getElementById("srcs").innerHTML = sourcesList(run);
+    document.getElementById("runlink").innerHTML = `Run ${esc(run.id)} · started ${when(run.started_at)} · <a href="#report/${esc(run.id)}">Open fix report →</a>`;
+  };
+  await tick();
+  timers.push(setInterval(tick, 1000));
+}
+
+// ---------------------------------------------------------------- history
+async function renderHistory() {
+  const { runs } = await getJSON("/api/runs");
+  if (!runs.length) { view.innerHTML = `<div class="card empty">No runs yet.</div>`; return; }
+  const done = runs.filter(r => r.status === "done");
+  const avg = done.length ? done.reduce((a, r) => a + (r.duration || 0), 0) / done.length : 0;
+  view.innerHTML = `
+    <div class="two" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card"><div class="muted small">Diagnoses</div><div style="font-size:28px;font-weight:700">${runs.length}</div></div>
+      <div class="card"><div class="muted small">Completed</div><div style="font-size:28px;font-weight:700">${done.length}</div></div>
+      <div class="card"><div class="muted small">Avg. time to fix plan</div><div style="font-size:28px;font-weight:700">${avg ? fmtS(avg) : "—"}</div></div>
+    </div>
+    <h2>All runs</h2>
+    <div class="hist">${runs.map(r => `
+      <a class="hcard" href="#report/${esc(r.id)}">
+        <div class="img" style="background-image:url('${esc(r.thumb)}')"></div>
+        <div class="body">
+          <div class="src muted">${esc(SOURCE[r.source] || r.source)} · <span class="status-${esc(r.status)}">${esc(r.status.replace("_", " "))}</span></div>
+          <div class="title">${esc(r.object_type || "Unidentified")} ${r.visible_error ? `<span class="tag err">${esc(r.visible_error)}</span>` : ""}</div>
+          <div class="small muted">${esc((r.problem || "").slice(0, 110))}</div>
+          <div class="small muted">${when(r.started_at)}${r.duration ? ` · ${fmtS(r.duration)}` : ""}${r.steps ? ` · ${r.steps} steps` : ""}</div>
+        </div>
+      </a>`).join("")}</div>`;
+}
+
+// ---------------------------------------------------------------- report
+async function renderReport(id) {
+  const res = await fetch(`/api/runs/${encodeURIComponent(id)}`);
+  if (!res.ok) { view.innerHTML = `<div class="card empty">Report not found.</div>`; return; }
+  const run = await res.json();
+  const d = run.diagnosis || {}, p = run.plan || {};
+  const total = secs(run.started_at, run.ended_at);
+  const bars = STAGES.filter(s => s.key !== "guide").map(s => {
+    const st = run.stages[s.key]; const t = secs(st.started, st.ended);
+    return t && total ? `<div style="flex:${t};background:${COLORS[s.key]}" title="${s.title}: ${fmtS(t)}">${t / total > .12 ? `${s.title} ${fmtS(t)}` : ""}</div>` : "";
+  }).join("");
+  view.innerHTML = `<div class="report">
+    <div class="noprint" style="display:flex;gap:8px;justify-content:space-between;margin-bottom:12px">
+      <a href="#history">← History</a><button class="btn" onclick="print()">Print / save PDF</button>
+    </div>
+    <div class="muted small">FIX REPORT</div>
+    <h1>${esc(d.object_type || "Unidentified problem")}${d.visible_error ? ` — ${esc(d.visible_error)}` : ""}</h1>
+    <div class="meta">
+      <span>${when(run.started_at)}</span><span>Input: ${esc(SOURCE[run.source] || run.source)}</span>
+      ${total ? `<span>Time to fix plan: ${fmtS(total)}</span>` : ""}<span>Status: <b class="status-${esc(run.status)}">${esc(run.status.replace("_", " "))}</b></span>
+      <span>Run ${esc(run.id)}</span>
+    </div>
+
+    <section><h2>Problem</h2>${diagnosisCard(run)}</section>
+    ${p.needs_professional ? `<section><div class="safety">🔧 If these steps don't resolve it, book a qualified technician.</div></section>` : ""}
+
+    <section><h2>Fix steps</h2>${stepsList(run, true)}</section>
+
+    ${p.parts?.length ? `<section><h2>Parts & tools</h2><div class="card"><ul class="sources">${p.parts.map(x => `<li><b>${esc(x.name)}</b> — ${esc(x.why)}${x.url ? `<div class="host"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(host(x.url))}</a></div>` : ""}</li>`).join("")}</ul></div></section>` : ""}
+
+    <section><h2>Evidence</h2><div class="card">
+      ${run.frames?.length ? `<div class="frames">${run.frames.map(f => `<img src="${esc(f)}" alt="input frame">`).join("")}</div>` : `<div class="muted small">No images — diagnosed from the caller's description.</div>`}
+      ${run.note ? `<div style="margin-top:10px"><span class="muted small">Caller said:</span> “${esc(run.note)}”</div>` : ""}
+      ${run.transcripts?.length ? `<div style="margin-top:6px"><span class="muted small">Audio transcript:</span> ${run.transcripts.map(t => `“${esc(t)}”`).join(" ")}</div>` : ""}
+    </div></section>
+
+    <section><h2>Sources</h2><div class="card">${sourcesList(run)}<div class="small muted" style="margin-top:8px">★ = cited in the fix plan</div></div></section>
+
+    <section><h2>Pipeline timing</h2><div class="timeline">${bars}</div>
+      <div class="small muted" style="margin-top:6px">${STAGES.filter(s => s.key !== "guide").map(s => { const st = run.stages[s.key]; const t = secs(st.started, st.ended); return `${s.title}: ${t ? fmtS(t) : st.status}`; }).join(" · ")}</div>
+    </section>
+    ${run.error ? `<section><div class="safety" style="border-color:var(--err)">Error: ${esc(run.error)}</div></section>` : ""}
+  </div>`;
+}
+
+// ---------------------------------------------------------------- router
+async function route() {
+  clearTimers();
+  const [tab, id] = (location.hash.slice(1) || "live").split("/");
+  document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.tab === (tab === "report" ? "history" : tab)));
+  if (tab === "history") await renderHistory();
+  else if (tab === "report" && id) await renderReport(id);
+  else await renderLive();
+  window.scrollTo(0, 0);
+}
+addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

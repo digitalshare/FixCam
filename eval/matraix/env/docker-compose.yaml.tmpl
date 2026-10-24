@@ -1,0 +1,22 @@
+services:
+  main:
+    depends_on:
+      fixcam-api:
+        condition: service_healthy
+
+  fixcam-api:
+    build:
+      context: ./fixcam-proxy
+    expose:
+      - "8000"
+    environment:
+      FIXCAM_CASE_ID: "__CASE_ID__"
+      FIXCAM_UPSTREAM: "${FIXCAM_UPSTREAM:-http://host.docker.internal:8000}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('localhost',8000),timeout=2); s.close()"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
